@@ -1,13 +1,21 @@
-#version 420 core
+#version 430 core
+
+struct NodeType {
+  uint color;
+  float depth;
+  uint next;
+};
 // The per-pixel image containing the head pointers
 layout (binding = 0, r32ui) uniform uimage2D head_pointer_image;
 // Buffer containing linked lists of fragments
-layout (binding = 1, rgba32ui) uniform uimageBuffer list_buffer;
+layout( binding = 0, std430 ) buffer linkedLists {
+  NodeType nodes[];
+};
 // This is the maximum number of overlapping fragments allowed
-#define MAX_FRAGMENTS 60
+#define MAX_FRAGMENTS 75
 
 // Temporary array used for sorting fragments
-uvec4 curfragment;
+
 
 layout (location = 0) out vec4 color;
 uniform vec2 resolution;
@@ -22,25 +30,26 @@ float LinearizeDepth(float depth)
 }
 void main(void)
 { 
+    NodeType curfragment;
     uint current_index;
     uint fragment_count = 0;
     int count=0;
-    vec2 screenuv=gl_FragCoord.xy/resolution;
     current_index = imageLoad(head_pointer_image, ivec2(gl_FragCoord).xy).x;
+    curfragment.depth=1.0;
     //curfragment=imageLoad(list_buffer, int(current_index));
-    curfragment.z=floatBitsToUint(1.0);
+    
     while (current_index != 0 && fragment_count < MAX_FRAGMENTS)
     {
-        uvec4 fragment = imageLoad(list_buffer, int(current_index));
-        float depth=uintBitsToFloat(fragment.z);
-        current_index = fragment.x;
-        if(depth>gl_FragCoord.z){
-            float curdepth=uintBitsToFloat(curfragment.z);
+        NodeType fragment = nodes[current_index];
+        float depth=fragment.depth;
+        current_index = fragment.next;
+        if(abs(depth)>gl_FragCoord.z){
+            float curdepth=abs(curfragment.depth);
             
-            if(fragment.y==1)
+            if(depth<0)
                count++;
-            if(fragment.y==2){
-                if(depth<curdepth)
+            if(depth>0){
+                if(abs(depth)<curdepth)
                     curfragment=fragment;
                 count--;
             }
@@ -50,7 +59,7 @@ void main(void)
         fragment_count++;
     }
     float depth = LinearizeDepth(gl_FragCoord.z) / far;
-    vec4 modulator = unpackUnorm4x8(curfragment.w);
+    vec4 modulator = unpackUnorm4x8(curfragment.color);
     if(count!=0)
         color = modulator;
     else

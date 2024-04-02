@@ -16,8 +16,8 @@
 #define MAX_FRAMEBUFFER_WIDTH 2048
 #define MAX_FRAMEBUFFER_HEIGHT 2048
 //screen resolution
-const int WIDTH = 1600;
-const int HEIGHT = 1200;
+const int WIDTH = 1920;
+const int HEIGHT = 1080;
 
 
 // timing
@@ -43,6 +43,8 @@ GLuint  atomic_counter_buffer;
 GLuint  linked_list_buffer;
 GLuint  linked_list_texture;
 
+
+GLuint buffers[2];
 // Program to render the scene
 GLuint render_scene_prog;
 struct
@@ -54,6 +56,7 @@ struct
 	GLint view_matrix;
 	GLint projection_matrix;
 	GLint side;
+	GLint MaxNodes;
 } render_scene_uniforms;
 
 struct
@@ -70,6 +73,7 @@ GLuint resolve_program;
 // Program to render clipping plane 
 GLuint render_plane;
 
+GLuint maxNodes;
 
 // Full Screen Quad
 GLuint  quad_vbo;
@@ -95,6 +99,7 @@ void InitPrograms() {
 
 	render_scene_prog = LoadShaders(scene_shaders);
 
+	render_scene_uniforms.MaxNodes = glGetUniformLocation(render_scene_prog, "MaxNodes");
 	render_scene_uniforms.side = glGetUniformLocation(render_scene_prog, "side");
 	render_scene_uniforms.light = glGetUniformLocation(render_scene_prog, "light");
 	render_scene_uniforms.viewPos = glGetUniformLocation(render_scene_prog, "viewPos");
@@ -127,12 +132,12 @@ void InitPrograms() {
 }
 
 void Initialize() {
-	GLuint* data;
+	GLuint* data;//局部变量
 	render_scene_prog = -1;
 
-	InitPrograms();
+	InitPrograms();//初始化着色器
 
-	// Create head pointer texture
+	// 创建一个2D图像，用来储存逐像素链表中的head指针信息
 	glActiveTexture(GL_TEXTURE0);
 	glGenTextures(1, &head_pointer_texture);
 	glBindTexture(GL_TEXTURE_2D, head_pointer_texture);
@@ -143,7 +148,7 @@ void Initialize() {
 
 	glBindImageTexture(0, head_pointer_texture, 0, GL_TRUE, 0, GL_READ_WRITE, GL_R32UI);
 
-	// Create buffer for clearing the head pointer texture
+	// 创建缓存用于拷贝，以重新初始化head指针
 	glGenBuffers(1, &head_pointer_clear_buffer);
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, head_pointer_clear_buffer);
 	glBufferData(GL_PIXEL_UNPACK_BUFFER, MAX_FRAMEBUFFER_WIDTH * MAX_FRAMEBUFFER_HEIGHT * sizeof(GLuint), NULL, GL_STATIC_DRAW);
@@ -151,24 +156,29 @@ void Initialize() {
 	memset(data, 0x00, MAX_FRAMEBUFFER_WIDTH * MAX_FRAMEBUFFER_HEIGHT * sizeof(GLuint));
 	glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
 
-	// Create the atomic counter buffer
+	// 创建原子计数器缓存
 	glGenBuffers(1, &atomic_counter_buffer);
 	glBindBuffer(GL_ATOMIC_COUNTER_BUFFER, atomic_counter_buffer);
 	glBufferData(GL_ATOMIC_COUNTER_BUFFER, sizeof(GLuint), NULL, GL_DYNAMIC_COPY);
 
-	// Create the linked list storage buffer
+	//// 创建一个较大的一维缓存来储存片元数据
+	//glGenBuffers(1, &linked_list_buffer);
+	//glBindBuffer(GL_TEXTURE_BUFFER, linked_list_buffer);
+	//glBufferData(GL_TEXTURE_BUFFER, MAX_FRAMEBUFFER_WIDTH * MAX_FRAMEBUFFER_HEIGHT * 4 * sizeof(glm::vec2), NULL, GL_DYNAMIC_COPY);
+	//glBindBuffer(GL_TEXTURE_BUFFER, 0);
+
+	//// Bind it to a texture (for use as a TBO)
+	//glGenTextures(1, &linked_list_texture);
+	//glBindTexture(GL_TEXTURE_BUFFER, linked_list_texture);
+	//glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32UI, linked_list_buffer);
+	//glBindTexture(GL_TEXTURE_BUFFER, 0);
+
+	//glBindImageTexture(1, linked_list_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG32UI);
 	glGenBuffers(1, &linked_list_buffer);
-	glBindBuffer(GL_TEXTURE_BUFFER, linked_list_buffer);
-	glBufferData(GL_TEXTURE_BUFFER, MAX_FRAMEBUFFER_WIDTH * MAX_FRAMEBUFFER_HEIGHT * 4 * sizeof(glm::vec4), NULL, GL_DYNAMIC_COPY);
-	glBindBuffer(GL_TEXTURE_BUFFER, 0);
-
-	// Bind it to a texture (for use as a TBO)
-	glGenTextures(1, &linked_list_texture);
-	glBindTexture(GL_TEXTURE_BUFFER, linked_list_texture);
-	glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32UI, linked_list_buffer);
-	glBindTexture(GL_TEXTURE_BUFFER, 0);
-
-	glBindImageTexture(1, linked_list_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32UI);
+	maxNodes = 12 * WIDTH * HEIGHT;
+	GLint nodeSize = sizeof(GLfloat) + 2*sizeof(GLuint); // The size of a linked list node
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, linked_list_buffer);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, maxNodes * nodeSize, NULL, GL_DYNAMIC_DRAW);
 
 	glGenVertexArrays(1, &quad_vao);
 	glBindVertexArray(quad_vao);
@@ -219,13 +229,13 @@ void RenderGeoModel() {
 	glEnable(GL_CULL_FACE);         // 启用剔除
 	glCullFace(GL_BACK);            // 剔除背向面
 
-	// Reset atomic counter
+	// 将原子计数器缓存的计数值重置为0
 	glBindBufferBase(GL_ATOMIC_COUNTER_BUFFER, 0, atomic_counter_buffer);
 	data = (GLuint*)glMapBuffer(GL_ATOMIC_COUNTER_BUFFER, GL_WRITE_ONLY);
 	data[0] = 0;
 	glUnmapBuffer(GL_ATOMIC_COUNTER_BUFFER);
 
-	// Clear head-pointer image
+	// 清除2D图像存储的head指针
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, head_pointer_clear_buffer);
 	glBindTexture(GL_TEXTURE_2D, head_pointer_texture);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RED_INTEGER, GL_UNSIGNED_INT, NULL);
@@ -234,14 +244,13 @@ void RenderGeoModel() {
 	// Bind head-pointer image for read-write
 	glBindImageTexture(0, head_pointer_texture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32UI);
 
-	// Bind linked-list buffer for write
-	glBindImageTexture(1, linked_list_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32UI);
 
 	glUseProgram(render_scene_prog);
 	glm::mat4 model_matrix = glm::mat4(1.0f);
 	//model_matrix = glm::scale(model_matrix, glm::vec3(90.0, 90.0, 90.0));
 	glm::mat4 view_matrix = camera->viewMatrix;
 	glm::mat4 projection_matrix = camera->projectionMatrix;
+	glUniform1ui(render_scene_uniforms.MaxNodes, maxNodes);
 	glUniform1ui(render_scene_uniforms.side, 1);
 	glUniform1f(render_scene_uniforms.shininess, 1.0);
 	glUniform3f(render_scene_uniforms.light + 0, 40.0, 90.0, -40.0);
@@ -292,7 +301,7 @@ void Display() {
 	glBindImageTexture(0, head_pointer_texture, 0, GL_FALSE, 0, GL_READ_WRITE, GL_R32UI);
 
 	// Bind linked-list buffer for write
-	glBindImageTexture(1, linked_list_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32UI);
+	glBindImageTexture(1, linked_list_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG32UI);
 
 	//object.Render(0, 8 * 8 * 8);
 
@@ -366,9 +375,10 @@ int main() {
 	glfwSetCursorPosCallback(window, glfw_cursor_pos_callback);
 	glViewport(0, 0, WIDTH, HEIGHT);
 	//InitPrograms();
+	
 	Initialize();
 	geoModel.loadModel();
-	//glEnable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_TEST);
 	
 
 
@@ -379,7 +389,9 @@ int main() {
 	//firstpersonControls=new FirstPersonControls(camera,window);
 	trackballControls = new TrackballControls(camera, window);
 
-
+	GLint depthBits;
+	glGetIntegerv(GL_DEPTH_BITS, &depthBits);
+	cout << depthBits << endl;
 
 	//glEnable(GL_DEPTH_TEST);
 	int i = 0;

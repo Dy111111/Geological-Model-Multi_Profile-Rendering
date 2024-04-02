@@ -1,11 +1,21 @@
-#version 420 core
+#version 430 core
 
 layout (early_fragment_tests) in;
 
+struct NodeType {
+  uint color;
+  float depth;
+  uint next;
+};
+
 layout (binding = 0, r32ui) uniform uimage2D head_pointer_image;
-layout (binding = 1, rgba32ui) uniform writeonly uimageBuffer list_buffer;
+//layout (binding = 1, rg32ui) uniform writeonly uimageBuffer list_buffer;
+layout( binding = 0, std430 ) buffer linkedLists {
+  NodeType nodes[];
+};
 
 layout (binding = 0, offset = 0) uniform atomic_uint list_counter;
+uniform uint MaxNodes;
 
 layout (location = 0) out vec4 color;
 
@@ -40,23 +50,33 @@ void main(void)
 {
     uint index;
     uint old_head;
-    uvec4 item;
+    uvec2 item;
     vec4 frag_color;
 
     index = atomicCounterIncrement(list_counter);
-
+    if( index< MaxNodes ) {
+    float depth=gl_FragCoord.z;
+    if(side==1) depth=-depth;
+    // Our fragment will be the new head of the linked list, so
+    // replace the value at gl_FragCoord.xy with our new node's
+    // index.  We use imageAtomicExchange to make sure that this
+    // is an atomic operation.  The return value is the old head
+    // of the list (the previous value), which will become the
+    // next element in the list once our node is inserted.
     old_head = imageAtomicExchange(head_pointer_image, ivec2(gl_FragCoord.xy), uint(index));
 
+    // Here we set the color and depth of this new node to the color
+    // and depth of the fragment.  The next pointer, points to the
+    // previous head of the list.
+    nodes[index].color = packUnorm4x8(Diffuse);
+    nodes[index].depth = depth;
+    nodes[index].next = old_head;
+  }
+    
 
     vec4 modulator = Diffuse;
     //vec4 additive_component = mix(modulator, vec4(1.0), 0.6) * vec4(pow(clamp(NdotH, 0.0, 1.0), 26.0)) * 0.7;
-
-    item.x = old_head;
-    item.y = side;
-    item.z = floatBitsToUint(gl_FragCoord.z);
-    item.w = packUnorm4x8(modulator);
-
-    imageStore(list_buffer, int(index), item);
+    
 
     frag_color = modulator;
 
