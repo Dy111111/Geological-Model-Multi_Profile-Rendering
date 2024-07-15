@@ -82,7 +82,8 @@ GLuint  quad_vao;
 GLint current_width;
 GLint current_height;
 
-Model geoModel(FileSystem::getPath("resources/model/geomodel/l4.obj"));
+Model geoModel(FileSystem::getPath("resources/model/geomodel/l5.obj"));
+//Model geoModel("C:/Users/lisaidy/Desktop/data/geo8.obj");
 
 
 void InitPrograms() {
@@ -175,7 +176,7 @@ void Initialize() {
 
 	//glBindImageTexture(1, linked_list_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RG32UI);
 	glGenBuffers(1, &linked_list_buffer);
-	maxNodes = 12 * WIDTH * HEIGHT;
+	maxNodes = 25 * WIDTH * HEIGHT;
 	GLint nodeSize = sizeof(GLfloat) + 2*sizeof(GLuint); // The size of a linked list node
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, linked_list_buffer);
 	glBufferData(GL_SHADER_STORAGE_BUFFER, maxNodes * nodeSize, NULL, GL_DYNAMIC_DRAW);
@@ -208,7 +209,7 @@ void DrawPlane(float angle, glm::vec3 axis, glm::vec3 position) {
 	model_matrix = glm::translate(model_matrix, position);
 	
 	model_matrix = glm::rotate(model_matrix, glm::radians(angle), axis);
-	model_matrix = glm::scale(model_matrix, glm::vec3(80.0, 80.0, 80.0));
+	model_matrix = glm::scale(model_matrix, glm::vec3(150.0, 150.0, 150.0));
 
 
 	glm::mat4 view_matrix = camera->viewMatrix;
@@ -353,7 +354,7 @@ int main() {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "VolumeRendering", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "model_clipping demo", NULL, NULL);
 	if (window == NULL)
 	{
 		printf("window create failed");
@@ -382,7 +383,7 @@ int main() {
 	
 
 
-	camera = new Camera(45, float(WIDTH) / HEIGHT, 0.1, 500);
+	camera = new Camera(45, float(WIDTH) / HEIGHT, 0.1, 1000);
 
 	camera->position = glm::vec3(45, 90, 45);
 	camera->lookAt(glm::vec3(0, 0, 0));
@@ -413,17 +414,17 @@ int main() {
 			sum = 0;
 		}
 		
-		glClearColor(0.39f, 0.58f, 0.92f, 0.0f);
+		glClearColor(0.73f, 0.73f, 0.73f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		RenderGeoModel();
-		glClearColor(0.39f, 0.58f, 0.92f, 0.0f);
+		glClearColor(0.73f, 0.73f, 0.73f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		
-		for (int i = -24; i < 32; i += 4)
+		for (int i = -24; i < 32; i += 8)
 		{
 			DrawPlane(0.0, glm::vec3(1, 0, 0), glm::vec3(0, 0, i));
 		}
-		for (int i = -32; i < 32; i += 4)
+		for (int i = -32; i < 32; i += 8)
 		{
 			DrawPlane(90.0, glm::vec3(0, 1, 0), glm::vec3(i, 0, 0));
 		}

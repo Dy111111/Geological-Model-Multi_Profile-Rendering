@@ -53,6 +53,7 @@ void main(void)
     uvec2 item;
     vec4 frag_color;
 
+    vec4 final=Diffuse+vec4(0.2,0.2,0.2,0);
     index = atomicCounterIncrement(list_counter);
     if( index< MaxNodes ) {
     float depth=gl_FragCoord.z;
@@ -68,7 +69,7 @@ void main(void)
     // Here we set the color and depth of this new node to the color
     // and depth of the fragment.  The next pointer, points to the
     // previous head of the list.
-    nodes[index].color = packUnorm4x8(Diffuse);
+    nodes[index].color = packUnorm4x8(final);
     nodes[index].depth = depth;
     nodes[index].next = old_head;
   }
